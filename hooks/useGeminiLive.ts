@@ -28,7 +28,7 @@ export const useGeminiLive = () => {
     console.log(`[${sender.toUpperCase()}] ${message}`);
   }, []);
 
-  const cleanup = useCallback(() => {
+  const cleanup = useCallback((keepErrorStatus = false) => {
     sourcesRef.current.forEach((source) => {
       try { source.stop(); } catch (e) {}
     });
@@ -62,7 +62,9 @@ export const useGeminiLive = () => {
     activeSessionRef.current = null;
 
     setOutputAnalyser(null);
-    setStatus(ConnectionState.DISCONNECTED);
+    if (!keepErrorStatus) {
+      setStatus(ConnectionState.DISCONNECTED);
+    }
     nextStartTimeRef.current = 0;
   }, []);
 
@@ -71,7 +73,7 @@ export const useGeminiLive = () => {
       setStatus(ConnectionState.CONNECTING);
       addLog('system', 'Initializing James Core...');
 
-      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      const AudioContextClass = (window.AudioContext || (window as any).webkitAudioContext);
       inputContextRef.current = new AudioContextClass({ sampleRate: SAMPLE_RATE_INPUT });
       outputContextRef.current = new AudioContextClass({ sampleRate: SAMPLE_RATE_OUTPUT });
 
@@ -86,6 +88,7 @@ export const useGeminiLive = () => {
         throw new Error("Neural link failed: Microphone access denied.");
       }
 
+      // Re-create AI instance to ensure fresh key from process.env.API_KEY
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
       const sessionPromise = ai.live.connect({
@@ -140,7 +143,6 @@ export const useGeminiLive = () => {
                 }
             }
 
-            // Handle audio parts
             const parts = message.serverContent?.modelTurn?.parts || [];
             for (const part of parts) {
               if (part.inlineData?.data && outputContextRef.current) {
@@ -171,7 +173,6 @@ export const useGeminiLive = () => {
               });
               sourcesRef.current.clear();
               nextStartTimeRef.current = 0;
-              addLog('system', 'Process interrupted.');
             }
           },
           onclose: (e) => {
@@ -180,7 +181,7 @@ export const useGeminiLive = () => {
           },
           onerror: (err) => {
             console.error("Live API Error:", err);
-            addLog('system', 'Neural Link failure: ' + (err instanceof Error ? err.message : 'Unknown error'));
+            addLog('system', 'Neural Link failure.');
             setStatus(ConnectionState.ERROR);
           }
         }
@@ -190,7 +191,7 @@ export const useGeminiLive = () => {
       console.error("Connection error:", error);
       addLog('system', `System Error: ${error.message}`);
       setStatus(ConnectionState.ERROR);
-      cleanup();
+      cleanup(true); // Keep error status visible
     }
   };
 

@@ -1,3 +1,4 @@
+
 import { Blob } from '@google/genai';
 
 export function decode(base64: string): Uint8Array {
@@ -25,13 +26,15 @@ export async function decodeAudioData(
   sampleRate: number,
   numChannels: number
 ): Promise<AudioBuffer> {
-  const dataInt16 = new Int16Array(data.buffer);
+  // Fix: Ensure we use the correct byteOffset and length for Int16Array
+  const dataInt16 = new Int16Array(data.buffer, data.byteOffset, data.byteLength / 2);
   const frameCount = dataInt16.length / numChannels;
   const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
 
   for (let channel = 0; channel < numChannels; channel++) {
     const channelData = buffer.getChannelData(channel);
     for (let i = 0; i < frameCount; i++) {
+      // Conversion from PCM16 to Float32
       channelData[i] = dataInt16[i * numChannels + channel] / 32768.0;
     }
   }
@@ -42,9 +45,9 @@ export function createPcmBlob(data: Float32Array): Blob {
   const l = data.length;
   const int16 = new Int16Array(l);
   for (let i = 0; i < l; i++) {
-    // Clamp values to [-1, 1] before converting to PCM16 to avoid wrapping artifacts
+    // Clamp values to [-1, 1] and multiply by 32767 to avoid overflow
     const clamped = Math.max(-1, Math.min(1, data[i]));
-    int16[i] = clamped * 32768;
+    int16[i] = clamped * 32767;
   }
   return {
     data: encode(new Uint8Array(int16.buffer)),

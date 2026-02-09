@@ -6,6 +6,18 @@ import Logger from './components/Logger';
 import SettingsModal from './components/SettingsModal';
 import { ConnectionState, AIConfig } from './types';
 
+// Fix: Resolve global declaration conflict for aistudio property on Window
+// We augment the existing AIStudio interface and ensure Window.aistudio uses it correctly.
+declare global {
+  interface AIStudio {
+    hasSelectedApiKey(): Promise<boolean>;
+    openSelectKey(): Promise<void>;
+  }
+  interface Window {
+    readonly aistudio: AIStudio;
+  }
+}
+
 const DEFAULT_CONFIG: AIConfig = {
   provider: 'gemini', 
   modelId: 'gemini-2.5-flash-native-audio-preview-12-2025',
@@ -18,17 +30,44 @@ const App: React.FC = () => {
   const [mounted, setMounted] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [config, setConfig] = useState<AIConfig>(DEFAULT_CONFIG);
-  const [showLogs, setShowLogs] = useState(false);
   
+  // PWA Install Logic
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+
   useEffect(() => {
     setMounted(true);
+    const handler = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
-  const handleToggleConnection = () => {
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setDeferredPrompt(null);
+    }
+  };
+
+  const handleToggleConnection = async () => {
     if (status === ConnectionState.CONNECTED || status === ConnectionState.CONNECTING) {
       disconnect();
     } else {
-      connect(config);
+      // Check for API Key first to "Make it work"
+      try {
+        if (window.aistudio && !(await window.aistudio.hasSelectedApiKey())) {
+          await window.aistudio.openSelectKey();
+          // After opening, we proceed assuming key selection was successful as per docs
+        }
+        connect(config);
+      } catch (e) {
+        console.error("Failed to check or open key selector", e);
+        connect(config);
+      }
     }
   };
 
@@ -39,118 +78,113 @@ const App: React.FC = () => {
   if (!mounted) return null;
 
   return (
-    <div className="relative h-screen w-full bg-slate-950 flex flex-col overflow-hidden selection:bg-cyan-500/30 text-slate-200">
+    <div className="relative h-screen w-full bg-[#020617] flex flex-col overflow-hidden selection:bg-cyan-500/30 text-slate-200">
       
       {/* HUD Background Effects */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#0f172a_1px,transparent_1px),linear-gradient(to_bottom,#0f172a_1px,transparent_1px)] bg-[size:3rem_3rem] opacity-20 pointer-events-none"></div>
-      <div className="absolute top-0 left-0 w-full h-40 bg-gradient-to-b from-cyan-900/10 to-transparent pointer-events-none"></div>
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(6,182,212,0.05),transparent_70%)] pointer-events-none"></div>
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#0f172a_1px,transparent_1px),linear-gradient(to_bottom,#0f172a_1px,transparent_1px)] bg-[size:4rem_4rem] opacity-10 pointer-events-none"></div>
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(6,182,212,0.03),transparent_70%)] pointer-events-none"></div>
       
       {/* Header */}
-      <header className="relative z-20 flex justify-between items-center px-6 py-4 border-b border-slate-800/40 backdrop-blur-md">
-        <div className="flex items-center gap-4">
+      <header className="relative z-20 flex justify-between items-center px-10 py-8 backdrop-blur-sm">
+        <div className="flex items-center gap-6">
           <div className="relative">
-            <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-cyan-400 animate-pulse shadow-[0_0_10px_rgba(34,211,238,0.8)]' : isError ? 'bg-red-500' : 'bg-slate-700'}`}></div>
-            {isConnected && <div className="absolute -inset-1 border border-cyan-400/50 rounded-full animate-ping"></div>}
+            <div className={`w-5 h-5 rounded-full transition-all duration-500 ${isConnected ? 'bg-cyan-400 shadow-[0_0_15px_#22d3ee]' : isError ? 'bg-red-500 shadow-[0_0_20px_#ef4444]' : 'bg-slate-700'}`}></div>
+            {isConnected && <div className="absolute -inset-2 border border-cyan-400/50 rounded-full animate-ping"></div>}
           </div>
-          <div>
-            <h1 className="font-tech text-xl tracking-[0.3em] text-slate-100 uppercase">James</h1>
-            <p className="text-[9px] font-mono text-cyan-500/70 tracking-tighter uppercase leading-none">Advanced Tactical Assistant</p>
+          <div className="flex flex-col">
+            <h1 className="font-tech text-4xl tracking-[0.4em] text-slate-100 uppercase leading-none">James</h1>
+            <p className="text-[10px] font-mono text-cyan-500/60 tracking-[0.3em] uppercase mt-1.5 font-bold">Advanced Tactical Assistant</p>
           </div>
         </div>
-        
-        {/* Buttons removed as requested (was marked in red) */}
       </header>
 
       {/* Main Interface */}
-      <main className="flex-1 flex flex-col relative z-10 items-center justify-center p-6 pb-20 overflow-hidden">
+      <main className="flex-1 flex flex-col relative z-10 items-center justify-center p-6 overflow-hidden">
         
         {/* Decorative corner borders */}
-        <div className="absolute top-4 left-4 w-8 h-8 border-t-2 border-l-2 border-cyan-500/30 pointer-events-none"></div>
-        <div className="absolute top-4 right-4 w-8 h-8 border-t-2 border-r-2 border-cyan-500/30 pointer-events-none"></div>
-        <div className="absolute bottom-4 left-4 w-8 h-8 border-b-2 border-l-2 border-cyan-500/30 pointer-events-none"></div>
-        <div className="absolute bottom-4 right-4 w-8 h-8 border-b-2 border-r-2 border-cyan-500/30 pointer-events-none"></div>
+        <div className="absolute top-10 left-10 w-16 h-16 border-t-[1px] border-l-[1px] border-cyan-500/30 pointer-events-none"></div>
+        <div className="absolute top-10 right-10 w-16 h-16 border-t-[1px] border-r-[1px] border-cyan-500/30 pointer-events-none"></div>
+        <div className="absolute bottom-10 left-10 w-16 h-16 border-b-[1px] border-l-[1px] border-cyan-500/30 pointer-events-none"></div>
+        <div className="absolute bottom-10 right-10 w-16 h-16 border-b-[1px] border-r-[1px] border-cyan-500/30 pointer-events-none"></div>
 
-        {/* Core Visualization */}
-        <div className="relative group w-full max-w-[500px] aspect-square flex items-center justify-center">
-          <div className={`absolute inset-0 border border-slate-800/50 rounded-full transition-all duration-1000 ${isConnected ? 'scale-110 opacity-100 border-cyan-500/20' : 'opacity-20'}`}></div>
-          <div className={`absolute inset-0 border border-slate-800/30 rounded-full scale-125 transition-all duration-1000 delay-100 ${isConnected ? 'opacity-50' : 'opacity-0'}`}></div>
+        {/* HUD Avatar (Spider-Man style) */}
+        <div className="absolute right-8 top-1/2 -translate-y-1/2 z-20">
+           <div className="relative w-24 h-24 rounded-full border-[1px] border-slate-700/80 overflow-hidden shadow-[0_0_30px_rgba(0,0,0,0.8)]">
+              <img 
+                src="https://avatarfiles.alphacoders.com/374/374187.png" 
+                alt="James Avatar" 
+                className="w-full h-full object-cover grayscale-[0.1]"
+              />
+              <div className="absolute inset-0 bg-cyan-500/10 pointer-events-none"></div>
+              <div className="absolute inset-0 border-[4px] border-slate-900/60 rounded-full"></div>
+           </div>
+        </div>
+
+        {/* Core Visualization & Central HUD Text */}
+        <div className="relative w-full max-w-[600px] aspect-square flex items-center justify-center">
+          {/* Background HUD Rings */}
+          <div className="absolute inset-0 border border-slate-800/20 rounded-full"></div>
+          <div className="absolute inset-[10%] border border-slate-800/40 rounded-full"></div>
+          <div className="absolute inset-[20%] border border-slate-800/20 rounded-full"></div>
           
-          <div className="relative z-10 w-full h-full p-4">
+          {/* Visualizer */}
+          <div className="absolute inset-0 p-10 z-0">
             <Visualizer analyser={outputAnalyser} isActive={isConnected} accentColor={isError ? '#ef4444' : '#06b6d4'} />
           </div>
 
-          {/* Center Glow */}
-          <div className={`absolute w-40 h-40 bg-cyan-500/10 rounded-full blur-[100px] transition-all duration-700 ${isConnected ? 'scale-150 opacity-100' : 'scale-50 opacity-0'}`}></div>
-        </div>
+          {/* Central Overlay */}
+          <div className="relative z-10 flex flex-col items-center gap-6 animate-fadeIn">
+            <h2 className={`font-tech text-4xl tracking-[0.2em] uppercase transition-all duration-700 ${isError ? 'text-red-500 drop-shadow-[0_0_10px_rgba(239,68,68,0.5)]' : isConnected ? 'text-cyan-400' : 'text-slate-400'}`}>
+              {isConnecting ? 'Linking...' : isConnected ? 'ACTIVE' : isError ? 'SYSTEM FAILURE' : 'SYSTEM HIBERNATING'}
+            </h2>
+            
+            <div className="h-[1px] w-40 bg-slate-800 relative">
+               {(isConnecting || isConnected) && (
+                 <div className="absolute h-full w-full bg-cyan-500 shadow-[0_0_10px_#06b6d4]"></div>
+               )}
+               {isError && (
+                 <div className="absolute h-full w-full bg-red-500 shadow-[0_0_10px_#ef4444]"></div>
+               )}
+            </div>
 
-        {/* Status Text */}
-        <div className="mt-8 flex flex-col items-center gap-1">
-          <span className={`font-tech text-sm tracking-[0.2em] uppercase ${isError ? 'text-red-500' : isConnected ? 'text-cyan-400' : 'text-slate-500'}`}>
-            {isConnecting ? 'Linking Neural Net...' : isConnected ? 'Uplink Established' : isError ? 'Core Failure' : 'System Hibernating'}
-          </span>
-          <div className="h-0.5 w-32 bg-slate-800 relative overflow-hidden">
-             {(isConnecting || isConnected) && (
-               <div className={`absolute h-full ${isConnecting ? 'w-1/2 animate-[shimmer_2s_infinite]' : 'w-full'} bg-cyan-500`}></div>
-             )}
+            {/* Centered Download Button as per screenshot */}
+            {deferredPrompt && (status === ConnectionState.DISCONNECTED || isError) && (
+              <button 
+                onClick={handleInstallClick}
+                className="mt-2 px-10 py-3 border border-cyan-500/40 bg-cyan-500/5 hover:bg-cyan-500/10 text-cyan-400/90 font-tech text-sm tracking-[0.15em] rounded-sm transition-all uppercase"
+              >
+                Download Application
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Action Button */}
-        <div className="mt-12">
+        {/* Bottom Action Button (INITIATE PROTOCOL) */}
+        <div className="mt-8 z-20">
           <button
             onClick={handleToggleConnection}
             disabled={isConnecting}
-            className={`relative overflow-hidden group px-12 py-4 font-tech text-sm font-bold tracking-[0.2em] transition-all duration-300 rounded-sm
+            className={`relative overflow-hidden group px-20 py-6 font-tech text-2xl font-bold tracking-[0.3em] transition-all duration-300 border rounded-sm
               ${isConnected 
-                ? 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/50 shadow-[0_0_20px_rgba(239,68,68,0.1)]' 
-                : 'bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/50 shadow-[0_0_20px_rgba(6,182,212,0.1)]'
+                ? 'bg-red-500/5 hover:bg-red-500/10 text-red-500 border-red-500/40 shadow-[0_0_40px_rgba(239,68,68,0.1)]' 
+                : 'bg-cyan-500/5 hover:bg-cyan-500/10 text-cyan-400 border-cyan-500/40 shadow-[0_0_40px_rgba(6,182,212,0.1)]'
               } active:scale-95 disabled:opacity-50`}
           >
             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
             <span className="relative uppercase">
-              {isConnecting ? 'Initializing...' : isConnected ? 'Deactivate' : 'Establish Protocol'}
+              {isConnecting ? 'LINKING...' : isConnected ? 'DEACTIVATE' : 'INITIATE PROTOCOL'}
             </span>
           </button>
         </div>
       </main>
 
-      {/* Terminal Overlay */}
-      <div className={`fixed bottom-0 left-0 w-full transition-all duration-500 z-30 ${showLogs ? 'h-1/3 opacity-100' : 'h-0 opacity-0 pointer-events-none'}`}>
-        <Logger logs={logs} />
-      </div>
-
-      {/* Footer info removed as requested (was marked in red) */}
-
-      {/* Modals - Kept in background to allow configuration if needed through code/other methods, but UI triggers are gone */}
-      <SettingsModal 
-        isOpen={showSettings} 
-        onClose={() => setShowSettings(false)} 
-        config={config}
-        onConfigChange={setConfig}
-      />
-
       <style>{`
-        @keyframes shimmer {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(200%); }
-        }
         @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(5px); }
-          to { opacity: 1; transform: translateY(0); }
+          from { opacity: 0; transform: scale(0.95); }
+          to { opacity: 1; transform: scale(1); }
         }
         .animate-fadeIn {
-          animation: fadeIn 0.3s ease-out forwards;
-        }
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 4px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: rgba(15, 23, 42, 0.5);
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: rgba(6, 182, 212, 0.3);
-          border-radius: 2px;
+          animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
       `}</style>
     </div>
