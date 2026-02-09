@@ -1,3 +1,4 @@
+
 import { useState, useRef, useCallback } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
 import { ConnectionState, LogEntry, AIConfig } from '../types';
@@ -17,7 +18,7 @@ export const useGeminiLive = () => {
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const nextStartTimeRef = useRef<number>(0);
   const sourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
-  const activeSessionRef = useRef<any>(null); 
+  const activeSessionRef = useRef<Promise<any> | null>(null); 
   
   const currentInputRef = useRef<string>('');
   const currentOutputRef = useRef<string>('');
@@ -33,8 +34,12 @@ export const useGeminiLive = () => {
     });
     sourcesRef.current.clear();
 
-    if (inputContextRef.current) inputContextRef.current.close();
-    if (outputContextRef.current) outputContextRef.current.close();
+    if (inputContextRef.current) {
+      inputContextRef.current.close().catch(() => {});
+    }
+    if (outputContextRef.current) {
+      outputContextRef.current.close().catch(() => {});
+    }
     
     inputContextRef.current = null;
     outputContextRef.current = null;
@@ -49,19 +54,22 @@ export const useGeminiLive = () => {
       processorRef.current = null;
     }
 
+    if (activeSessionRef.current) {
+      activeSessionRef.current.then((session) => {
+        try { session.close(); } catch (e) {}
+      }).catch(() => {});
+    }
     activeSessionRef.current = null;
+
     setOutputAnalyser(null);
     setStatus(ConnectionState.DISCONNECTED);
+    nextStartTimeRef.current = 0;
   }, []);
 
   const connectGemini = async (config: AIConfig) => {
     try {
       setStatus(ConnectionState.CONNECTING);
-      addLog('system', 'Iniciando James... Aguarde.');
-
-      if (!config.apiKey) {
-        throw new Error("Chave de API (API_KEY) não configurada.");
-      }
+      addLog('system', 'Initializing James Core...');
 
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
       inputContextRef.current = new AudioContextClass({ sampleRate: SAMPLE_RATE_INPUT });
@@ -69,15 +77,16 @@ export const useGeminiLive = () => {
 
       const analyser = outputContextRef.current.createAnalyser();
       analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.8;
       setOutputAnalyser(analyser);
 
       try {
         streamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
       } catch (err) {
-        throw new Error("Permissão de microfone negada ou não disponível.");
+        throw new Error("Neural link failed: Microphone access denied.");
       }
 
-      const ai = new GoogleGenAI({ apiKey: config.apiKey });
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
       const sessionPromise = ai.live.connect({
         model: config.modelId,
@@ -92,7 +101,7 @@ export const useGeminiLive = () => {
         },
         callbacks: {
           onopen: () => {
-            addLog('system', 'Sistema online. Pode falar, senhor.');
+            addLog('system', 'Neural Link established. Systems online.');
             setStatus(ConnectionState.CONNECTED);
             
             if (!inputContextRef.current || !streamRef.current) return;
@@ -131,61 +140,66 @@ export const useGeminiLive = () => {
                 }
             }
 
-            const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
-            if (base64Audio && outputContextRef.current) {
-              const ctx = outputContextRef.current;
-              nextStartTimeRef.current = Math.max(nextStartTimeRef.current, ctx.currentTime);
-              
-              try {
-                const audioBuffer = await decodeAudioData(decode(base64Audio), ctx, SAMPLE_RATE_OUTPUT, 1);
-                const source = ctx.createBufferSource();
-                source.buffer = audioBuffer;
+            // Handle audio parts
+            const parts = message.serverContent?.modelTurn?.parts || [];
+            for (const part of parts) {
+              if (part.inlineData?.data && outputContextRef.current) {
+                const ctx = outputContextRef.current;
+                nextStartTimeRef.current = Math.max(nextStartTimeRef.current, ctx.currentTime);
                 
-                source.connect(analyser);
-                analyser.connect(ctx.destination);
+                try {
+                  const audioBuffer = await decodeAudioData(decode(part.inlineData.data), ctx, SAMPLE_RATE_OUTPUT, 1);
+                  const source = ctx.createBufferSource();
+                  source.buffer = audioBuffer;
+                  
+                  source.connect(analyser);
+                  analyser.connect(ctx.destination);
 
-                source.start(nextStartTimeRef.current);
-                nextStartTimeRef.current += audioBuffer.duration;
-                sourcesRef.current.add(source);
-                source.onended = () => sourcesRef.current.delete(source);
-              } catch (err) {
-                console.error("Erro ao decodificar áudio", err);
+                  source.start(nextStartTimeRef.current);
+                  nextStartTimeRef.current += audioBuffer.duration;
+                  sourcesRef.current.add(source);
+                  source.onended = () => sourcesRef.current.delete(source);
+                } catch (err) {
+                  console.error("Audio decode error:", err);
+                }
               }
             }
 
             if (message.serverContent?.interrupted) {
-              sourcesRef.current.forEach(src => src.stop());
+              sourcesRef.current.forEach(src => {
+                try { src.stop(); } catch(e) {}
+              });
               sourcesRef.current.clear();
               nextStartTimeRef.current = 0;
+              addLog('system', 'Process interrupted.');
             }
           },
-          onclose: () => {
-            addLog('system', 'Conexão encerrada.');
+          onclose: (e) => {
+            if (e.reason) addLog('system', `Uplink terminated: ${e.reason}`);
             setStatus(ConnectionState.DISCONNECTED);
           },
           onerror: (err) => {
-            console.error("Erro na sessão Gemini:", err);
-            addLog('system', 'Erro de conexão: ' + (err instanceof Error ? err.message : 'Falha na API'));
+            console.error("Live API Error:", err);
+            addLog('system', 'Neural Link failure: ' + (err instanceof Error ? err.message : 'Unknown error'));
             setStatus(ConnectionState.ERROR);
           }
         }
       });
       activeSessionRef.current = sessionPromise;
     } catch (error: any) {
-      console.error("Erro ao conectar:", error);
-      addLog('system', `Falha: ${error.message}`);
+      console.error("Connection error:", error);
+      addLog('system', `System Error: ${error.message}`);
       setStatus(ConnectionState.ERROR);
       cleanup();
     }
   };
 
   const connect = useCallback(async (config: AIConfig) => {
-    const apiKey = config.apiKey || process.env.API_KEY;
-    await connectGemini({ ...config, apiKey });
+    await connectGemini(config);
   }, [addLog, cleanup]);
 
   const disconnect = useCallback(() => {
-    addLog('system', 'Desligando sistemas...');
+    addLog('system', 'Shutting down protocols...');
     cleanup();
   }, [addLog, cleanup]);
 

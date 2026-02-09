@@ -1,3 +1,4 @@
+
 export interface StreamConfig {
   sampleRate: number;
 }
@@ -25,7 +26,7 @@ export type AIProvider = 'gemini' | 'openai' | 'deep_psychology' | 'custom';
 
 export interface AIConfig {
   provider: AIProvider;
-  apiKey: string;
+  // AI key is managed exclusively via process.env.API_KEY
   modelId: string;
   voiceName: string;
   systemInstruction: string;
