@@ -9,8 +9,9 @@ const DEFAULT_CONFIG: AIConfig = {
   provider: 'gemini', 
   // SECURITY: Key loaded from Environment Variables
   apiKey: process.env.API_KEY || '', 
-  // Using gemini-2.0-flash-exp as it is currently the most stable model for Live API interactions
-  modelId: 'gemini-2.0-flash-exp',
+  // 'gemini-2.5-flash-native-audio-preview-12-2025' is the ONLY model currently supporting Live API (Bidi) reliably.
+  // If you get 503 errors, it is server congestion, but this is the correct model ID.
+  modelId: 'gemini-2.5-flash-native-audio-preview-12-2025',
   // 'Fenrir' is the deep, authoritative voice closest to Jarvis
   voiceName: 'Fenrir', 
   systemInstruction: "You are James, an advanced AI assistant inspired by Jarvis from Iron Man. Your voice is Fenrir. Your tone is calm, professional, slightly dry, and extremely efficient. You do not use emojis. You speak fluently in Portuguese (Brazil) and English. If the user speaks Portuguese, reply in Portuguese. If English, reply in English. Keep responses concise and to the point. Address the user as 'Sir' or 'Boss' occasionally. When acknowledging commands, use phrases like 'Processing', 'Protocols initiated', or 'As you wish'.",
