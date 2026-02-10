@@ -73,10 +73,23 @@ export const useGeminiLive = () => {
       setStatus(ConnectionState.CONNECTING);
       addLog('system', 'Initializing James Core...');
 
-      // API Key is assumed to be pre-configured as per guidelines.
+      // Check for Secure Context (Microphone requires HTTPS or localhost)
+      if (!window.isSecureContext) {
+        throw new Error("Neural link requires a secure connection (HTTPS).");
+      }
+
+      // Check for MediaDevices support
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("Your browser environment does not support neural audio linking.");
+      }
+
       const AudioContextClass = (window.AudioContext || (window as any).webkitAudioContext);
       inputContextRef.current = new AudioContextClass({ sampleRate: SAMPLE_RATE_INPUT });
       outputContextRef.current = new AudioContextClass({ sampleRate: SAMPLE_RATE_OUTPUT });
+
+      // Ensure contexts are resumed (critical for modern browser policies)
+      await inputContextRef.current.resume();
+      await outputContextRef.current.resume();
 
       const analyser = outputContextRef.current.createAnalyser();
       analyser.fftSize = 512;
@@ -84,13 +97,27 @@ export const useGeminiLive = () => {
       setOutputAnalyser(analyser);
 
       try {
-        streamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
-      } catch (err) {
-        throw new Error("Neural link failed: Microphone access denied.");
+        addLog('system', 'Requesting microphone authorization...');
+        streamRef.current = await navigator.mediaDevices.getUserMedia({ 
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            sampleRate: SAMPLE_RATE_INPUT
+          } 
+        });
+      } catch (err: any) {
+        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+          throw new Error("Access Denied: Please enable microphone permissions in your browser.");
+        } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+          throw new Error("Hardware Failure: No microphone detected on this system.");
+        } else {
+          throw new Error(`Neural link failed: ${err.message || "Microphone access denied."}`);
+        }
       }
 
-      // Fix: Create a new GoogleGenAI instance right before making an API call and use process.env.API_KEY directly.
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+      const apiKey = process.env.API_KEY as string;
+      const ai = new GoogleGenAI({ apiKey });
       
       const sessionPromise = ai.live.connect({
         model: config.modelId,
@@ -117,7 +144,6 @@ export const useGeminiLive = () => {
             scriptProcessor.onaudioprocess = (e) => {
               const inputData = e.inputBuffer.getChannelData(0);
               const pcmBlob = createPcmBlob(inputData);
-              // CRITICAL: Solely rely on sessionPromise resolves and then call `session.sendRealtimeInput`
               sessionPromise.then((session) => {
                 session.sendRealtimeInput({ media: pcmBlob });
               }).catch(() => {});
@@ -135,7 +161,6 @@ export const useGeminiLive = () => {
             }
 
             if (message.serverContent?.turnComplete) {
-                // Fix: Copy transcription values to local variables before clearing to avoid issues with asynchronous updates
                 const fullInput = currentInputRef.current.trim();
                 const fullOutput = currentOutputRef.current.trim();
                 if (fullInput) addLog('user', fullInput);
@@ -183,7 +208,6 @@ export const useGeminiLive = () => {
           onerror: (err: any) => {
             console.error("Live API Error:", err);
             addLog('system', 'Neural Link failure.');
-            // Fix: If Requested entity not found, reset key selection state
             if (err.message && err.message.includes("Requested entity was not found.")) {
               (window as any).aistudio?.openSelectKey();
             }
@@ -194,11 +218,10 @@ export const useGeminiLive = () => {
       activeSessionRef.current = sessionPromise;
     } catch (error: any) {
       console.error("Connection error:", error);
-      // Fix: If Requested entity not found, reset key selection state
       if (error.message && error.message.includes("Requested entity was not found.")) {
         (window as any).aistudio?.openSelectKey();
       }
-      addLog('system', `System Error: ${error.message}`);
+      addLog('system', `Error: ${error.message}`);
       setStatus(ConnectionState.ERROR);
       cleanup(true);
     }
