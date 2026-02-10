@@ -14,27 +14,10 @@ const DEFAULT_CONFIG: AIConfig = {
 const App: React.FC = () => {
   const { status, connect, disconnect, outputAnalyser } = useGeminiLive();
   const [mounted, setMounted] = useState(false);
-  
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
   useEffect(() => {
     setMounted(true);
-    const handler = (e: any) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-    };
-    window.addEventListener('beforeinstallprompt', handler);
-    return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
-
-  const handleInstallClick = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') {
-      setDeferredPrompt(null);
-    }
-  };
 
   const handleToggleConnection = async () => {
     if (status === ConnectionState.CONNECTED || status === ConnectionState.CONNECTING) {
@@ -122,15 +105,6 @@ const App: React.FC = () => {
                  <div className="absolute h-full w-full bg-red-500 shadow-[0_0_10px_#ef4444]"></div>
                )}
             </div>
-
-            {deferredPrompt && (status === ConnectionState.DISCONNECTED || isError) && (
-              <button 
-                onClick={handleInstallClick}
-                className="mt-2 px-10 py-3 border border-cyan-500/40 bg-cyan-500/5 hover:bg-cyan-500/10 text-cyan-400/90 font-tech text-sm tracking-[0.15em] rounded-sm transition-all uppercase"
-              >
-                Download HUD
-              </button>
-            )}
           </div>
         </div>
 
