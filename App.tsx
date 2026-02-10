@@ -2,8 +2,6 @@
 import React, { useState, useEffect } from 'react';
 import { useGeminiLive } from './hooks/useGeminiLive';
 import Visualizer from './components/Visualizer';
-import Logger from './components/Logger';
-import SettingsModal from './components/SettingsModal';
 import { ConnectionState, AIConfig } from './types';
 
 const DEFAULT_CONFIG: AIConfig = {
@@ -14,10 +12,8 @@ const DEFAULT_CONFIG: AIConfig = {
 };
 
 const App: React.FC = () => {
-  const { status, connect, disconnect, outputAnalyser, logs } = useGeminiLive();
+  const { status, connect, disconnect, outputAnalyser } = useGeminiLive();
   const [mounted, setMounted] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [config, setConfig] = useState<AIConfig>(DEFAULT_CONFIG);
   
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
@@ -56,11 +52,11 @@ const App: React.FC = () => {
           }
         }
         
-        // Conecta usando process.env.API_KEY (que o seletor do AI Studio injeta ou que o Vercel provê)
-        connect(config);
+        // Conecta usando process.env.API_KEY e a configuração padrão
+        connect(DEFAULT_CONFIG);
       } catch (e) {
         console.warn("External environment detected or key selector failed. Proceeding with environment defaults.", e);
-        connect(config);
+        connect(DEFAULT_CONFIG);
       }
     }
   };
@@ -87,17 +83,8 @@ const App: React.FC = () => {
           </div>
           <div className="flex flex-col">
             <h1 className="font-tech text-4xl tracking-[0.4em] text-slate-100 uppercase leading-none">James</h1>
-            <p className="text-[10px] font-mono text-cyan-500/60 tracking-[0.3em] uppercase mt-1.5 font-bold italic">Neural Interface v2.5</p>
           </div>
         </div>
-
-        <button 
-          onClick={() => setShowSettings(true)}
-          className="group flex items-center gap-3 px-4 py-2 border border-slate-800 hover:border-cyan-500/50 transition-all rounded-sm bg-slate-900/40 backdrop-blur-md"
-        >
-          <span className="text-[10px] font-mono text-slate-500 group-hover:text-cyan-400 tracking-widest uppercase transition-colors">Core Settings</span>
-          <svg className="text-slate-500 group-hover:text-cyan-400 transition-colors" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
-        </button>
       </header>
 
       {/* Main Interface */}
@@ -165,18 +152,6 @@ const App: React.FC = () => {
           </button>
         </div>
       </main>
-
-      {/* Fixed Logger Panel */}
-      <div className="hidden xl:block absolute bottom-10 right-10 w-96 h-64 z-30 opacity-60 hover:opacity-100 transition-opacity">
-        <Logger logs={logs} />
-      </div>
-
-      <SettingsModal 
-        isOpen={showSettings} 
-        onClose={() => setShowSettings(false)} 
-        config={config} 
-        onConfigChange={setConfig} 
-      />
 
       <style>{`
         @keyframes fadeIn {
