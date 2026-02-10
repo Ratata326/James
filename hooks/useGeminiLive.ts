@@ -73,6 +73,7 @@ export const useGeminiLive = () => {
       setStatus(ConnectionState.CONNECTING);
       addLog('system', 'Initializing James Core...');
 
+      // API Key is assumed to be pre-configured as per guidelines.
       const AudioContextClass = (window.AudioContext || (window as any).webkitAudioContext);
       inputContextRef.current = new AudioContextClass({ sampleRate: SAMPLE_RATE_INPUT });
       outputContextRef.current = new AudioContextClass({ sampleRate: SAMPLE_RATE_OUTPUT });
@@ -88,8 +89,8 @@ export const useGeminiLive = () => {
         throw new Error("Neural link failed: Microphone access denied.");
       }
 
-      // Re-create AI instance to ensure fresh key from process.env.API_KEY
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      // Fix: Create a new GoogleGenAI instance right before making an API call and use process.env.API_KEY directly.
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
       
       const sessionPromise = ai.live.connect({
         model: config.modelId,
@@ -116,6 +117,7 @@ export const useGeminiLive = () => {
             scriptProcessor.onaudioprocess = (e) => {
               const inputData = e.inputBuffer.getChannelData(0);
               const pcmBlob = createPcmBlob(inputData);
+              // CRITICAL: Solely rely on sessionPromise resolves and then call `session.sendRealtimeInput`
               sessionPromise.then((session) => {
                 session.sendRealtimeInput({ media: pcmBlob });
               }).catch(() => {});
@@ -133,14 +135,13 @@ export const useGeminiLive = () => {
             }
 
             if (message.serverContent?.turnComplete) {
-                if (currentInputRef.current.trim()) {
-                    addLog('user', currentInputRef.current.trim());
-                    currentInputRef.current = '';
-                }
-                if (currentOutputRef.current.trim()) {
-                    addLog('ai', currentOutputRef.current.trim());
-                    currentOutputRef.current = '';
-                }
+                // Fix: Copy transcription values to local variables before clearing to avoid issues with asynchronous updates
+                const fullInput = currentInputRef.current.trim();
+                const fullOutput = currentOutputRef.current.trim();
+                if (fullInput) addLog('user', fullInput);
+                if (fullOutput) addLog('ai', fullOutput);
+                currentInputRef.current = '';
+                currentOutputRef.current = '';
             }
 
             const parts = message.serverContent?.modelTurn?.parts || [];
@@ -179,9 +180,13 @@ export const useGeminiLive = () => {
             if (e.reason) addLog('system', `Uplink terminated: ${e.reason}`);
             setStatus(ConnectionState.DISCONNECTED);
           },
-          onerror: (err) => {
+          onerror: (err: any) => {
             console.error("Live API Error:", err);
             addLog('system', 'Neural Link failure.');
+            // Fix: If Requested entity not found, reset key selection state
+            if (err.message && err.message.includes("Requested entity was not found.")) {
+              (window as any).aistudio?.openSelectKey();
+            }
             setStatus(ConnectionState.ERROR);
           }
         }
@@ -189,9 +194,13 @@ export const useGeminiLive = () => {
       activeSessionRef.current = sessionPromise;
     } catch (error: any) {
       console.error("Connection error:", error);
+      // Fix: If Requested entity not found, reset key selection state
+      if (error.message && error.message.includes("Requested entity was not found.")) {
+        (window as any).aistudio?.openSelectKey();
+      }
       addLog('system', `System Error: ${error.message}`);
       setStatus(ConnectionState.ERROR);
-      cleanup(true); // Keep error status visible
+      cleanup(true);
     }
   };
 

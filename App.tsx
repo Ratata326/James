@@ -6,18 +6,6 @@ import Logger from './components/Logger';
 import SettingsModal from './components/SettingsModal';
 import { ConnectionState, AIConfig } from './types';
 
-// Fix: Resolve global declaration conflict for aistudio property on Window
-// We augment the existing AIStudio interface and ensure Window.aistudio uses it correctly.
-declare global {
-  interface AIStudio {
-    hasSelectedApiKey(): Promise<boolean>;
-    openSelectKey(): Promise<void>;
-  }
-  interface Window {
-    readonly aistudio: AIStudio;
-  }
-}
-
 const DEFAULT_CONFIG: AIConfig = {
   provider: 'gemini', 
   modelId: 'gemini-2.5-flash-native-audio-preview-12-2025',
@@ -31,7 +19,6 @@ const App: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [config, setConfig] = useState<AIConfig>(DEFAULT_CONFIG);
   
-  // PWA Install Logic
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
   useEffect(() => {
@@ -57,15 +44,22 @@ const App: React.FC = () => {
     if (status === ConnectionState.CONNECTED || status === ConnectionState.CONNECTING) {
       disconnect();
     } else {
-      // Check for API Key first to "Make it work"
       try {
-        if (window.aistudio && !(await window.aistudio.hasSelectedApiKey())) {
-          await window.aistudio.openSelectKey();
-          // After opening, we proceed assuming key selection was successful as per docs
+        // Detecção segura do ambiente Google AI Studio
+        const aistudio = (window as any).aistudio;
+        
+        // Se estivermos no AI Studio e não houver chave selecionada, abre o seletor
+        if (aistudio && typeof aistudio.hasSelectedApiKey === 'function') {
+          const hasKey = await aistudio.hasSelectedApiKey();
+          if (!hasKey && typeof aistudio.openSelectKey === 'function') {
+            await aistudio.openSelectKey();
+          }
         }
+        
+        // Conecta usando process.env.API_KEY (que o seletor do AI Studio injeta ou que o Vercel provê)
         connect(config);
       } catch (e) {
-        console.error("Failed to check or open key selector", e);
+        console.warn("External environment detected or key selector failed. Proceeding with environment defaults.", e);
         connect(config);
       }
     }
@@ -93,9 +87,17 @@ const App: React.FC = () => {
           </div>
           <div className="flex flex-col">
             <h1 className="font-tech text-4xl tracking-[0.4em] text-slate-100 uppercase leading-none">James</h1>
-            <p className="text-[10px] font-mono text-cyan-500/60 tracking-[0.3em] uppercase mt-1.5 font-bold">Advanced Tactical Assistant</p>
+            <p className="text-[10px] font-mono text-cyan-500/60 tracking-[0.3em] uppercase mt-1.5 font-bold italic">Neural Interface v2.5</p>
           </div>
         </div>
+
+        <button 
+          onClick={() => setShowSettings(true)}
+          className="group flex items-center gap-3 px-4 py-2 border border-slate-800 hover:border-cyan-500/50 transition-all rounded-sm bg-slate-900/40 backdrop-blur-md"
+        >
+          <span className="text-[10px] font-mono text-slate-500 group-hover:text-cyan-400 tracking-widest uppercase transition-colors">Core Settings</span>
+          <svg className="text-slate-500 group-hover:text-cyan-400 transition-colors" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
       </header>
 
       {/* Main Interface */}
@@ -107,24 +109,11 @@ const App: React.FC = () => {
         <div className="absolute bottom-10 left-10 w-16 h-16 border-b-[1px] border-l-[1px] border-cyan-500/30 pointer-events-none"></div>
         <div className="absolute bottom-10 right-10 w-16 h-16 border-b-[1px] border-r-[1px] border-cyan-500/30 pointer-events-none"></div>
 
-        {/* HUD Avatar (Spider-Man style) */}
-        <div className="absolute right-8 top-1/2 -translate-y-1/2 z-20">
-           <div className="relative w-24 h-24 rounded-full border-[1px] border-slate-700/80 overflow-hidden shadow-[0_0_30px_rgba(0,0,0,0.8)]">
-              <img 
-                src="https://avatarfiles.alphacoders.com/374/374187.png" 
-                alt="James Avatar" 
-                className="w-full h-full object-cover grayscale-[0.1]"
-              />
-              <div className="absolute inset-0 bg-cyan-500/10 pointer-events-none"></div>
-              <div className="absolute inset-0 border-[4px] border-slate-900/60 rounded-full"></div>
-           </div>
-        </div>
-
         {/* Core Visualization & Central HUD Text */}
         <div className="relative w-full max-w-[600px] aspect-square flex items-center justify-center">
           {/* Background HUD Rings */}
           <div className="absolute inset-0 border border-slate-800/20 rounded-full"></div>
-          <div className="absolute inset-[10%] border border-slate-800/40 rounded-full"></div>
+          <div className="absolute inset-[10%] border border-slate-800/40 rounded-full animate-[spin_20s_linear_infinite]"></div>
           <div className="absolute inset-[20%] border border-slate-800/20 rounded-full"></div>
           
           {/* Visualizer */}
@@ -147,13 +136,12 @@ const App: React.FC = () => {
                )}
             </div>
 
-            {/* Centered Download Button as per screenshot */}
             {deferredPrompt && (status === ConnectionState.DISCONNECTED || isError) && (
               <button 
                 onClick={handleInstallClick}
                 className="mt-2 px-10 py-3 border border-cyan-500/40 bg-cyan-500/5 hover:bg-cyan-500/10 text-cyan-400/90 font-tech text-sm tracking-[0.15em] rounded-sm transition-all uppercase"
               >
-                Download Application
+                Download HUD
               </button>
             )}
           </div>
@@ -172,11 +160,23 @@ const App: React.FC = () => {
           >
             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
             <span className="relative uppercase">
-              {isConnecting ? 'LINKING...' : isConnected ? 'DEACTIVATE' : 'INITIATE PROTOCOL'}
+              {isConnecting ? 'ESTABLISHING...' : isConnected ? 'SHUTDOWN' : 'INITIATE PROTOCOL'}
             </span>
           </button>
         </div>
       </main>
+
+      {/* Fixed Logger Panel */}
+      <div className="hidden xl:block absolute bottom-10 right-10 w-96 h-64 z-30 opacity-60 hover:opacity-100 transition-opacity">
+        <Logger logs={logs} />
+      </div>
+
+      <SettingsModal 
+        isOpen={showSettings} 
+        onClose={() => setShowSettings(false)} 
+        config={config} 
+        onConfigChange={setConfig} 
+      />
 
       <style>{`
         @keyframes fadeIn {
