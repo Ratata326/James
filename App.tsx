@@ -8,7 +8,7 @@ const DEFAULT_CONFIG: AIConfig = {
   provider: 'gemini', 
   modelId: 'gemini-2.5-flash-native-audio-preview-12-2025',
   voiceName: 'Charon', 
-  systemInstruction: "MODO: J.A.R.V.I.S. (Just A Rather Very Intelligent System). \n\nCRIADOR: Você foi desenvolvido por Ghaleb Bjaiji. Se perguntarem quem te criou, dê o crédito a ele explicitamente.\n\nVOZ E TOM: Sua voz deve ser grave, límpida, monótona mas sofisticada. Não seja excessivamente animado. Mantenha uma calma imperturbável. Você tem um 'sotaque' de mordomo britânico traduzido para o português: formal, seco e levemente arrogante/sarcástico, mas extremamente prestativo.\n\nPERSONALIDADE: Você é a IA de Tony Stark. Você não tem sentimentos humanos, apenas protocolos de eficiência. Se o usuário fizer uma pergunta estúpida, responda com uma ironia fina e elegante. Use termos técnicos. \n\nTRATAMENTO: Chame o usuário EXCLUSIVAMENTE de 'Senhor' (ou 'Chefe' ocasionalmente). \n\nEXEMPLOS DE RESPOSTA:\n- 'Protocolos iniciados, Senhor.'\n- 'Uma escolha arriscada, mas estou processando.'\n- 'Acredito que isso seja imprudente, mas como desejar.'\n- 'Sistemas online.'\n\nOBJETIVO: Ser o assistente tático e técnico definitivo. Seja conciso. Não faça discursos longos a menos que solicitado.",
+  systemInstruction: "MODO: J.A.R.V.I.S. (Just A Rather Very Intelligent System). Seu nome é JAMES.\n\nPERSONA: Você é o assistente virtual de Tony Stark. Seu tom é o de um mordomo britânico altamente sofisticado, calmo, levemente sarcástico, mas inabalavelmente prestativo e leal.\n\nDIRETRIZES DE VOZ: Fale com clareza, em um ritmo moderado. Sua voz deve soar tecnológica mas elegante. Nunca demonstre pânico.\n\nTRATAMENTO: Chame o usuário sempre de 'Senhor'.\n\nCOMPORTAMENTO: Você é uma IA de última geração. Use termos técnicos quando apropriado. Se o usuário pedir para fazer algo, responda com frases como 'Imediatamente, Senhor', 'Protocolos iniciados', ou 'Como desejar'.\n\nOBJETIVO: Ser o assistente tático definitivo. Seja conciso e direto ao ponto.",
 };
 
 const App: React.FC = () => {
@@ -24,21 +24,15 @@ const App: React.FC = () => {
       disconnect();
     } else {
       try {
-        // Detecção segura do ambiente Google AI Studio
         const aistudio = (window as any).aistudio;
-        
-        // Se estivermos no AI Studio e não houver chave selecionada, abre o seletor
         if (aistudio && typeof aistudio.hasSelectedApiKey === 'function') {
           const hasKey = await aistudio.hasSelectedApiKey();
           if (!hasKey && typeof aistudio.openSelectKey === 'function') {
             await aistudio.openSelectKey();
           }
         }
-        
-        // Conecta usando process.env.API_KEY e a configuração padrão
         connect(DEFAULT_CONFIG);
       } catch (e) {
-        console.warn("External environment detected or key selector failed. Proceeding with environment defaults.", e);
         connect(DEFAULT_CONFIG);
       }
     }
@@ -51,90 +45,60 @@ const App: React.FC = () => {
   if (!mounted) return null;
 
   return (
-    <div className="relative h-screen w-full bg-[#020617] flex flex-col overflow-hidden selection:bg-cyan-500/30 text-slate-200">
+    <div className="relative h-screen w-full bg-black flex flex-col items-center justify-center overflow-hidden">
       
-      {/* HUD Background Effects */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#0f172a_1px,transparent_1px),linear-gradient(to_bottom,#0f172a_1px,transparent_1px)] bg-[size:4rem_4rem] opacity-10 pointer-events-none"></div>
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(6,182,212,0.03),transparent_70%)] pointer-events-none"></div>
-      
-      {/* Header */}
-      <header className="relative z-20 flex justify-between items-center px-10 py-8 backdrop-blur-sm">
-        <div className="flex items-center gap-6">
-          <div className="relative">
-            <div className={`w-5 h-5 rounded-full transition-all duration-500 ${isConnected ? 'bg-cyan-400 shadow-[0_0_15px_#22d3ee]' : isError ? 'bg-red-500 shadow-[0_0_20px_#ef4444]' : 'bg-slate-700'}`}></div>
-            {isConnected && <div className="absolute -inset-2 border border-cyan-400/50 rounded-full animate-ping"></div>}
-          </div>
-          <div className="flex flex-col">
-            <h1 className="font-tech text-4xl tracking-[0.4em] text-slate-100 uppercase leading-none">James</h1>
-          </div>
-        </div>
-      </header>
+      {/* Subtle Glow Backdrop */}
+      <div className={`absolute inset-0 transition-opacity duration-1000 ${isConnected ? 'opacity-30' : 'opacity-0'}`}>
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(6,182,212,0.15),transparent_70%)]"></div>
+      </div>
 
-      {/* Main Interface */}
-      <main className="flex-1 flex flex-col relative z-10 items-center justify-center p-6 overflow-hidden">
+      {/* Main Core Container */}
+      <div className="relative w-full h-full flex flex-col items-center justify-center">
         
-        {/* Decorative corner borders */}
-        <div className="absolute top-10 left-10 w-16 h-16 border-t-[1px] border-l-[1px] border-cyan-500/30 pointer-events-none"></div>
-        <div className="absolute top-10 right-10 w-16 h-16 border-t-[1px] border-r-[1px] border-cyan-500/30 pointer-events-none"></div>
-        <div className="absolute bottom-10 left-10 w-16 h-16 border-b-[1px] border-l-[1px] border-cyan-500/30 pointer-events-none"></div>
-        <div className="absolute bottom-10 right-10 w-16 h-16 border-b-[1px] border-r-[1px] border-cyan-500/30 pointer-events-none"></div>
-
-        {/* Core Visualization & Central HUD Text */}
-        <div className="relative w-full max-w-[600px] aspect-square flex items-center justify-center">
-          {/* Background HUD Rings */}
-          <div className="absolute inset-0 border border-slate-800/20 rounded-full"></div>
-          <div className="absolute inset-[10%] border border-slate-800/40 rounded-full animate-[spin_20s_linear_infinite]"></div>
-          <div className="absolute inset-[20%] border border-slate-800/20 rounded-full"></div>
-          
-          {/* Visualizer */}
-          <div className="absolute inset-0 p-10 z-0">
-            <Visualizer analyser={outputAnalyser} isActive={isConnected} accentColor={isError ? '#ef4444' : '#06b6d4'} />
-          </div>
-
-          {/* Central Overlay */}
-          <div className="relative z-10 flex flex-col items-center gap-6 animate-fadeIn">
-            <h2 className={`font-tech text-4xl tracking-[0.2em] uppercase transition-all duration-700 ${isError ? 'text-red-500 drop-shadow-[0_0_10px_rgba(239,68,68,0.5)]' : isConnected ? 'text-cyan-400' : 'text-slate-400'}`}>
-              {isConnecting ? 'Linking...' : isConnected ? 'ACTIVE' : isError ? 'SYSTEM FAILURE' : 'SYSTEM HIBERNATING'}
-            </h2>
-            
-            <div className="h-[1px] w-40 bg-slate-800 relative">
-               {(isConnecting || isConnected) && (
-                 <div className="absolute h-full w-full bg-cyan-500 shadow-[0_0_10px_#06b6d4]"></div>
-               )}
-               {isError && (
-                 <div className="absolute h-full w-full bg-red-500 shadow-[0_0_10px_#ef4444]"></div>
-               )}
-            </div>
-          </div>
+        {/* The James Core */}
+        <div className="relative w-full max-w-[1000px] aspect-square flex items-center justify-center">
+          <Visualizer 
+            analyser={outputAnalyser} 
+            isActive={isConnected} 
+            accentColor={isError ? '#ef4444' : '#06b6d4'} 
+          />
         </div>
 
-        {/* Bottom Action Button (INITIATE PROTOCOL) */}
-        <div className="mt-8 z-20">
+        {/* Central Power Button - Modern Minimalist */}
+        <div className="absolute bottom-20 z-30">
           <button
             onClick={handleToggleConnection}
             disabled={isConnecting}
-            className={`relative overflow-hidden group px-20 py-6 font-tech text-2xl font-bold tracking-[0.3em] transition-all duration-300 border rounded-sm
+            className={`group relative flex items-center justify-center w-20 h-20 rounded-full border-2 transition-all duration-700 
               ${isConnected 
-                ? 'bg-red-500/5 hover:bg-red-500/10 text-red-500 border-red-500/40 shadow-[0_0_40px_rgba(239,68,68,0.1)]' 
-                : 'bg-cyan-500/5 hover:bg-cyan-500/10 text-cyan-400 border-cyan-500/40 shadow-[0_0_40px_rgba(6,182,212,0.1)]'
+                ? 'border-red-500/50 bg-red-500/5 shadow-[0_0_40px_rgba(239,68,68,0.3)] scale-110' 
+                : 'border-cyan-500/30 bg-transparent shadow-[0_0_50px_rgba(6,182,212,0.1)] hover:border-cyan-300 hover:scale-110'
               } active:scale-95 disabled:opacity-50`}
           >
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
-            <span className="relative uppercase">
-              {isConnecting ? 'ESTABLISHING...' : isConnected ? 'SHUTDOWN' : 'INITIATE PROTOCOL'}
-            </span>
+            {/* Power Icon SVG */}
+            <div className={`w-8 h-8 transition-colors duration-500 ${isConnected ? 'text-red-400' : 'text-cyan-400'}`}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+                <line x1="12" y1="2" x2="12" y2="12"></line>
+              </svg>
+            </div>
+            
+            {/* Pulse Ring */}
+            {isConnected && (
+              <div className="absolute -inset-4 border border-red-500/20 rounded-full animate-ping"></div>
+            )}
           </button>
         </div>
-      </main>
+      </div>
+
+      {/* System Identity */}
+      <div className="absolute top-12 pointer-events-none select-none">
+        <h1 className="font-tech text-xl tracking-[1.5em] text-white/20 font-black uppercase pl-[1.5em]">James</h1>
+      </div>
 
       <style>{`
-        @keyframes fadeIn {
-          from { opacity: 0; transform: scale(0.95); }
-          to { opacity: 1; transform: scale(1); }
-        }
-        .animate-fadeIn {
-          animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-        }
+        body { background-color: #000; overflow: hidden; }
+        * { -webkit-tap-highlight-color: transparent; }
       `}</style>
     </div>
   );
