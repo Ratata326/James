@@ -64,6 +64,16 @@ const App: React.FC = () => {
           />
         </div>
 
+        {/* Error Message Display */}
+        {isError && (
+          <div className="absolute top-1/4 z-50 bg-red-900/80 border border-red-500 text-red-200 px-6 py-4 rounded-lg backdrop-blur-md max-w-md text-center shadow-[0_0_30px_rgba(239,68,68,0.4)] animate-in fade-in zoom-in duration-300">
+            <h3 className="font-tech text-lg font-bold mb-2 uppercase tracking-widest text-red-400">System Failure</h3>
+            <p className="font-mono text-sm">
+              Connection interrupted. Check neural link status.
+            </p>
+          </div>
+        )}
+
         {/* Central Power Button - Modern Minimalist */}
         <div className="absolute bottom-20 z-30">
           <button

@@ -1,7 +1,7 @@
 
 import { useState, useRef, useCallback } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
-import { ConnectionState, LogEntry, AIConfig } from '../types';
+import { ConnectionState, AIConfig } from '../types';
 import { decode, decodeAudioData, createPcmBlob } from '../utils/audioUtils';
 
 const SAMPLE_RATE_INPUT = 16000;
@@ -9,7 +9,6 @@ const SAMPLE_RATE_OUTPUT = 24000;
 
 export const useGeminiLive = () => {
   const [status, setStatus] = useState<ConnectionState>(ConnectionState.DISCONNECTED);
-  const [logs, setLogs] = useState<LogEntry[]>([]);
   const [outputAnalyser, setOutputAnalyser] = useState<AnalyserNode | null>(null);
 
   const inputContextRef = useRef<AudioContext | null>(null);
@@ -22,11 +21,6 @@ export const useGeminiLive = () => {
   
   const currentInputRef = useRef<string>('');
   const currentOutputRef = useRef<string>('');
-
-  const addLog = useCallback((sender: LogEntry['sender'], message: string) => {
-    setLogs((prev) => [...prev, { timestamp: new Date(), sender, message }]);
-    console.log(`[${sender.toUpperCase()}] ${message}`);
-  }, []);
 
   const cleanup = useCallback((keepErrorStatus = false) => {
     sourcesRef.current.forEach((source) => {
@@ -71,7 +65,7 @@ export const useGeminiLive = () => {
   const connectGemini = async (config: AIConfig) => {
     try {
       setStatus(ConnectionState.CONNECTING);
-      addLog('system', 'Initializing James Core...');
+      console.log('[SYSTEM] Initializing James Core...');
 
       // Check for Secure Context (Microphone requires HTTPS or localhost)
       if (!window.isSecureContext) {
@@ -97,7 +91,7 @@ export const useGeminiLive = () => {
       setOutputAnalyser(analyser);
 
       try {
-        addLog('system', 'Requesting microphone authorization...');
+        console.log('[SYSTEM] Requesting microphone authorization...');
         streamRef.current = await navigator.mediaDevices.getUserMedia({ 
           audio: {
             echoCancellation: true,
@@ -132,7 +126,7 @@ export const useGeminiLive = () => {
         },
         callbacks: {
           onopen: () => {
-            addLog('system', 'Neural Link established. Systems online.');
+            console.log('[SYSTEM] Neural Link established. Systems online.');
             setStatus(ConnectionState.CONNECTED);
             
             if (!inputContextRef.current || !streamRef.current) return;
@@ -163,8 +157,8 @@ export const useGeminiLive = () => {
             if (message.serverContent?.turnComplete) {
                 const fullInput = currentInputRef.current.trim();
                 const fullOutput = currentOutputRef.current.trim();
-                if (fullInput) addLog('user', fullInput);
-                if (fullOutput) addLog('ai', fullOutput);
+                if (fullInput) console.log(`[USER] ${fullInput}`);
+                if (fullOutput) console.log(`[AI] ${fullOutput}`);
                 currentInputRef.current = '';
                 currentOutputRef.current = '';
             }
@@ -202,12 +196,12 @@ export const useGeminiLive = () => {
             }
           },
           onclose: (e) => {
-            if (e.reason) addLog('system', `Uplink terminated: ${e.reason}`);
+            if (e.reason) console.log(`[SYSTEM] Uplink terminated: ${e.reason}`);
             setStatus(ConnectionState.DISCONNECTED);
           },
           onerror: (err: any) => {
             console.error("Live API Error:", err);
-            addLog('system', 'Neural Link failure.');
+            console.log('[SYSTEM] Neural Link failure.');
             if (err.message && err.message.includes("Requested entity was not found.")) {
               (window as any).aistudio?.openSelectKey();
             }
@@ -221,7 +215,7 @@ export const useGeminiLive = () => {
       if (error.message && error.message.includes("Requested entity was not found.")) {
         (window as any).aistudio?.openSelectKey();
       }
-      addLog('system', `Error: ${error.message}`);
+      console.log(`[SYSTEM] Error: ${error.message}`);
       setStatus(ConnectionState.ERROR);
       cleanup(true);
     }
@@ -229,12 +223,12 @@ export const useGeminiLive = () => {
 
   const connect = useCallback(async (config: AIConfig) => {
     await connectGemini(config);
-  }, [addLog, cleanup]);
+  }, [cleanup]);
 
   const disconnect = useCallback(() => {
-    addLog('system', 'Shutting down protocols...');
+    console.log('[SYSTEM] Shutting down protocols...');
     cleanup();
-  }, [addLog, cleanup]);
+  }, [cleanup]);
 
-  return { status, connect, disconnect, logs, outputAnalyser };
+  return { status, connect, disconnect, outputAnalyser };
 };
