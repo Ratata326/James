@@ -21,6 +21,9 @@ export const useGeminiLive = () => {
   
   const currentInputRef = useRef<string>('');
   const currentOutputRef = useRef<string>('');
+  
+  // Memory: Stores conversation turns to persist context across reconnections
+  const historyRef = useRef<{role: string, text: string}[]>([]);
 
   const cleanup = useCallback((keepErrorStatus = false) => {
     sourcesRef.current.forEach((source) => {
@@ -110,9 +113,17 @@ export const useGeminiLive = () => {
         }
       }
 
-      const apiKey = process.env.API_KEY as string;
+      const apiKey = process.env.API_KEY || '';
       const ai = new GoogleGenAI({ apiKey });
       
+      // Construct memory context from history
+      const memoryContext = historyRef.current.map(entry => 
+        `${entry.role === 'user' ? 'User' : 'James'}: ${entry.text}`
+      ).join('\n');
+
+      const enhancedSystemInstruction = config.systemInstruction + 
+        (memoryContext ? `\n\n[MEMÓRIA DE CURTO PRAZO - CONVERSA ANTERIOR]:\n${memoryContext}\n\n[FIM DA MEMÓRIA]\nUse esta informação para manter a continuidade, mas não a repita desnecessariamente.` : '');
+
       const sessionPromise = ai.live.connect({
         model: config.modelId,
         config: {
@@ -122,7 +133,7 @@ export const useGeminiLive = () => {
           speechConfig: {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: config.voiceName } },
           },
-          systemInstruction: config.systemInstruction,
+          systemInstruction: enhancedSystemInstruction,
         },
         callbacks: {
           onopen: () => {
@@ -157,8 +168,24 @@ export const useGeminiLive = () => {
             if (message.serverContent?.turnComplete) {
                 const fullInput = currentInputRef.current.trim();
                 const fullOutput = currentOutputRef.current.trim();
-                if (fullInput) console.log(`[USER] ${fullInput}`);
-                if (fullOutput) console.log(`[AI] ${fullOutput}`);
+                
+                if (fullInput || fullOutput) {
+                    if (fullInput) console.log(`[USER] ${fullInput}`);
+                    if (fullOutput) console.log(`[AI] ${fullOutput}`);
+                    
+                    // Update short-term memory
+                    const turn = [];
+                    if (fullInput) turn.push({ role: 'user', text: fullInput });
+                    if (fullOutput) turn.push({ role: 'model', text: fullOutput });
+                    
+                    historyRef.current.push(...turn);
+                    
+                    // Limit memory to last 20 turns to prevent context overflow
+                    if (historyRef.current.length > 20) {
+                        historyRef.current = historyRef.current.slice(-20);
+                    }
+                }
+
                 currentInputRef.current = '';
                 currentOutputRef.current = '';
             }
